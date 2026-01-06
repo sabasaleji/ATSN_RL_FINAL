@@ -1,4 +1,4 @@
-# snapshot_collector.py - Collect social media metrics and store in post_snapshots
+# metrics_collector.py - Collect social media metrics and store in post_snapshots
 """
 Social Media Metrics Collector
 
@@ -89,6 +89,56 @@ def get_platform_credentials(platform: str, business_id: str) -> Optional[Dict[s
         return None
 
 
+async def fetch_facebook_follower_count(page_id: str, access_token: str) -> int:
+    """Fetch Facebook Page follower count"""
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"https://graph.facebook.com/v18.0/{page_id}"
+
+            params = {
+                "access_token": access_token,
+                "fields": "followers_count"
+            }
+
+            response = await client.get(url, params=params)
+
+            if response.status_code != 200:
+                logger.warning(f"Failed to fetch Facebook follower count: {response.text}")
+                return 0
+
+            data = response.json()
+            return data.get("followers_count", 0)
+
+    except Exception as e:
+        logger.error(f"Error fetching Facebook follower count: {e}")
+        return 0
+
+
+async def fetch_instagram_follower_count(instagram_account_id: str, access_token: str) -> int:
+    """Fetch Instagram Business Account follower count"""
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"https://graph.facebook.com/v18.0/{instagram_account_id}"
+
+            params = {
+                "access_token": access_token,
+                "fields": "followers_count"
+            }
+
+            response = await client.get(url, params=params)
+
+            if response.status_code != 200:
+                logger.warning(f"Failed to fetch Instagram follower count: {response.text}")
+                return 0
+
+            data = response.json()
+            return data.get("followers_count", 0)
+
+    except Exception as e:
+        logger.error(f"Error fetching Instagram follower count: {e}")
+        return 0
+
+
 async def fetch_facebook_post_metrics(page_id: str, access_token: str, media_id: str) -> Dict[str, Any]:
     """
     Fetch metrics for a Facebook post using the Graph API
@@ -120,6 +170,9 @@ async def fetch_facebook_post_metrics(page_id: str, access_token: str, media_id:
             data = response.json()
             logger.info(f"✅ Successfully fetched Facebook metrics for post {media_id}")
 
+            # Fetch follower count
+            follower_count = await fetch_facebook_follower_count(page_id, access_token)
+
             # Parse insights data
             metrics = {
                 "impressions": 0,
@@ -128,7 +181,8 @@ async def fetch_facebook_post_metrics(page_id: str, access_token: str, media_id:
                 "likes": 0,
                 "comments": 0,
                 "shares": 0,
-                "reactions": 0
+                "reactions": 0,
+                "follower_count": follower_count
             }
 
             if "data" in data:
@@ -178,7 +232,7 @@ async def fetch_instagram_post_metrics(instagram_account_id: str, access_token: 
 
             params = {
                 "access_token": access_token,
-                "metric": "impressions,reach,engagement,saved,likes,comments,replies"
+                "metric": "likes,comments,saved,total_interactions"
             }
 
             logger.info(f"📊 Fetching Instagram metrics for media {media_id}")
@@ -191,16 +245,20 @@ async def fetch_instagram_post_metrics(instagram_account_id: str, access_token: 
             data = response.json()
             logger.info(f"✅ Successfully fetched Instagram metrics for media {media_id}")
 
+            # Fetch follower count
+            follower_count = await fetch_instagram_follower_count(instagram_account_id, access_token)
+
             # Parse insights data
             metrics = {
-                "impressions": 0,
+                "impressions": 0,  # Not available for individual media in newer API versions
                 "reach": 0,
-                "engagement": 0,
+                "engagement": 0,  # Will be set from total_interactions
                 "likes": 0,
                 "comments": 0,
                 "replies": 0,
                 "saves": 0,
-                "shares": 0  # Instagram doesn't have shares, but we'll include for consistency
+                "shares": 0,  # Instagram doesn't have shares, but we'll include for consistency
+                "follower_count": follower_count
             }
 
             if "data" in data:
@@ -209,18 +267,12 @@ async def fetch_instagram_post_metrics(instagram_account_id: str, access_token: 
                     if "values" in insight and len(insight["values"]) > 0:
                         value = insight["values"][0].get("value", 0)
 
-                        if metric_name == "impressions":
-                            metrics["impressions"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
-                        elif metric_name == "reach":
-                            metrics["reach"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
-                        elif metric_name == "engagement":
+                        if metric_name == "total_interactions":
                             metrics["engagement"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
                         elif metric_name == "likes":
                             metrics["likes"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
                         elif metric_name == "comments":
                             metrics["comments"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
-                        elif metric_name == "replies":
-                            metrics["replies"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
                         elif metric_name == "saved":
                             metrics["saves"] = int(value) if isinstance(value, (int, str)) and str(value).isdigit() else 0
 
