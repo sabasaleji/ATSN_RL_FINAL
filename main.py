@@ -48,16 +48,16 @@ def check_and_run_scheduled_jobs():
     current_time_str = current_time.strftime("%H:%M")
     
     # Run scheduling job at 8:30 AM IST daily
-    if current_time_str == "07:30":
+    if current_time_str == "0:30":
         print("🌅 Time is 7:30 AM - Running scheduling job...")
         try:
             run_scheduling_job()
             print("✅ Scheduling job completed")
         except Exception as e:
             print(f"❌ Scheduling job failed: {e}")
-    
+
     # Run posting jobs at scheduled times
-    posting_times = ["08:30", "13:00", "18:30", "21:30"]  # Morning, Afternoon, Evening, Night
+    posting_times = ["03:30", "08:00", "13:30", "16:30"]  # Morning, Afternoon, Evening, Night
     
     if current_time_str in posting_times:
         print(f"🚀 Time is {current_time_str} - Running posting job...")

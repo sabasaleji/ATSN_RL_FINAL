@@ -12,6 +12,8 @@ import pytz
 IST = pytz.timezone("Asia/Kolkata")
 import db
 import rl_agent
+import snaphot_collector
+# Note: check_and_run_scheduled_jobs is imported dynamically to avoid circular imports
 
 # Thread-safe job queue (replace with Redis/Celery for production)
 job_queue = Queue()
@@ -219,17 +221,103 @@ def queue_reward_calculation_job(profile_id: str, post_id: str, platform: str) -
     print(f"📊 Current queue size: {job_queue.qsize()}")
     return job_id
 
+async def run_job_worker_async():
+    """Async wrapper for the synchronous job worker"""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, job_worker)
+
+
+async def run_unified_service():
+    """Run both job worker and metrics collection concurrently"""
+    print("🚀 Starting concurrent job processing and metrics collection...")
+
+    # Create tasks for both services
+    job_task = asyncio.create_task(run_job_worker_async())
+    metrics_task = asyncio.create_task(snaphot_collector.run_continuous_metrics_collection())
+
+    # Wait for both to complete (they run indefinitely until interrupted)
+    await asyncio.gather(job_task, metrics_task, return_exceptions=True)
+
+
 if __name__ == "__main__":
-    """Run job worker as independent process"""
-    print("🔄 Starting RL Job Worker as independent process...")
-    print("📋 This will run continuously and process queued jobs")
+    """Run unified service (jobs + metrics collection)"""
+    print("🔄 Starting Unified RL Service (Jobs + Metrics)...")
+    print("📋 This will run job processing and metrics collection continuously")
     print("⚠️  Use Ctrl+C to stop gracefully")
 
     try:
-        # Run the job worker continuously
-        asyncio.run(job_worker())
+        # Always run the scheduled jobs check first
+        print("🔍 Running scheduled jobs check...")
+        from main import check_and_run_scheduled_jobs
+        check_and_run_scheduled_jobs()
+
+        # Check if it's 11pm UTC and run main.py if so (independent of scheduled jobs check)
+        current_utc = datetime.now(pytz.UTC)
+        if current_utc.hour == 23:  # 11pm UTC
+            print("🌙 It's 11pm UTC - Running main.py...")
+            try:
+                # Import main module functions dynamically
+                import main
+
+                # Get all business profiles and process them (without calling check_and_run_scheduled_jobs again)
+                all_business_ids = db.get_all_profile_ids()
+                print(f"📊 Found {len(all_business_ids)} business profiles to check")
+
+                # Process each business (this replicates main.py's main loop)
+                for business_id in all_business_ids:
+                    try:
+                        print(f"\n🏢 Processing business: {business_id}")
+
+                        # Check if this business should create posts today
+                        if not db.should_create_post_today(business_id):
+                            print(f"⏸️ Skipping business {business_id} — not scheduled for today (IST)")
+                            continue
+
+                        # Get connected platforms for this business
+                        user_connected_platforms = list(set(db.get_connected_platforms(business_id)))
+                        print(f"📱 Business {business_id} has {len(user_connected_platforms)} connected platforms: {user_connected_platforms}")
+
+                        # Create posts for each platform
+                        for platform in user_connected_platforms:
+                            try:
+                                platform = platform.lower().strip()  # normalize
+
+                                if platform not in main.ALLOWED_PLATFORMS:
+                                    print(f"❌ Skipping unsupported platform: {platform} for business {business_id}")
+                                    continue  # skip unsupported platforms
+
+                                print(f"🚀 Creating post for business {business_id} on {platform}")
+
+                                main.run_one_post(
+                                    BUSINESS_ID=business_id,
+                                    platform=platform,
+                                )
+                                print(f"✅ Successfully processed post for {business_id} on {platform}")
+
+                            except Exception as e:
+                                print(f"❌ Failed to create post for {business_id} on {platform}: {e}")
+                                continue  # Continue with other platforms
+
+                    except Exception as e:
+                        print(f"❌ Failed to process business {business_id}: {e}")
+                        continue  # Continue with other businesses
+
+                print("\n✅ Daily post creation process completed for all businesses")
+
+            except Exception as e:
+                print(f"❌ Error running main.py at 11pm UTC: {e}")
+
+        # Run the unified service (both job worker and metrics collection)
+        asyncio.run(run_unified_service())
+
     except KeyboardInterrupt:
-        print("\n🛑 Job worker stopped by user")
+        print("\n🛑 Unified service stopped by user")
     except Exception as e:
-        print(f"❌ Job worker error: {e}")
+        print(f"❌ Unified service error: {e}")
         raise
+
+
+
+
+
+

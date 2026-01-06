@@ -482,7 +482,8 @@ def get_profile_business_data(profile_id):
             customer_pain_points,
             primary_color,
             secondary_color,
-            location_state
+            location_state,
+            logo_url
             """
         ).eq("id", profile_id).execute()
 
@@ -508,7 +509,8 @@ def get_profile_business_data(profile_id):
                 # Visual & geo context
                 "primary_color": p.get("primary_color") or "#000000",
                 "secondary_color": p.get("secondary_color") or "#FFFFFF",
-                "location_state": p.get("location_state") or "Gujarat"
+                "location_state": p.get("location_state") or "Gujarat",
+                "logo_url": p.get("logo_url") or None
             }
 
     except Exception as e:
@@ -568,11 +570,12 @@ def get_today_day_of_week_ist():
 
 def get_all_profile_ids():
     """
-    Returns a list of all profile IDs from the profiles table.
-    Used for iterating over all businesses in the system.
+    Returns a list of active profile IDs from the profiles table.
+    Only considers profiles with subscription_status = 'active'.
+    Used for iterating over all active businesses in the system.
     """
     try:
-        res = supabase.table("profiles").select("id").execute()
+        res = supabase.table("profiles").select("id").eq("subscription_status", "active").execute()
 
         if res.data:
             return [profile["id"] for profile in res.data]
@@ -580,7 +583,7 @@ def get_all_profile_ids():
             return []
 
     except Exception as e:
-        print(f"Error fetching all profile IDs: {e}")
+        print(f"Error fetching active profile IDs: {e}")
         return []
 
 
