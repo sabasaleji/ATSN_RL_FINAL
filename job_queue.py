@@ -145,7 +145,6 @@ def get_action_and_context_from_db(post_id: str, platform: str, profile_id: str)
         context = {
             "platform": platform,
             "time_bucket": action_row.get("time_bucket"),
-            "day_of_week": action_row.get("day_of_week"),
             "business_embedding": business_embedding,
             "topic_embedding": final_topic_embedding
         }
@@ -246,15 +245,13 @@ if __name__ == "__main__":
     print("⚠️  Use Ctrl+C to stop gracefully")
 
     try:
-        # Always run the scheduled jobs check first
-        print("🔍 Running scheduled jobs check...")
-        from main import check_and_run_scheduled_jobs
-        check_and_run_scheduled_jobs()
+        # Content generation and reward processing
+        
 
         # Check if it's 11pm UTC and run main.py if so (independent of scheduled jobs check)
         current_utc = datetime.now(pytz.UTC)
-        if current_utc.hour == 23:  # 11pm UTC
-            print("🌙 It's 11pm UTC - Running main.py...")
+        if current_utc.hour == 6:  # 6am UTC
+            print("🌙 It's 6am UTC - Running main.py...")
             try:
                 # Import main module functions dynamically
                 import main
